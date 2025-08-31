@@ -1,6 +1,8 @@
 
 mod packer;
 use packer::PackTo;
+use packer::UnpackFrom;
+
 
 fn main() {
     println!("Hello, world!");
@@ -12,4 +14,8 @@ fn main() {
     "hello world!".pack_to(&mut packet);
 
     println!("msg: {:?}", packet.buffer);
+
+    let i = i32::unpack_from(&mut packet);
+    let f = f32::unpack_from(&mut packet);
+    println!("unpack: {}, {}", i.unwrap(), f.unwrap());
 }
