@@ -13,9 +13,8 @@ fn main() {
     3.14_f32.pack_to(&mut packet);
     "hello world!".pack_to(&mut packet);
 
-    println!("msg: {:?}", packet.buffer);
-
     let i = i32::unpack_from(&mut packet);
     let f = f32::unpack_from(&mut packet);
-    println!("unpack: {}, {}", i.unwrap(), f.unwrap());
+    let s = String::unpack_from(&mut packet);
+    println!("unpack: {}, {}, {}", i.unwrap(), f.unwrap(), s.unwrap());
 }
