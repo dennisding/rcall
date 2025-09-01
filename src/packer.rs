@@ -1,5 +1,13 @@
 
-//use std::mem;
+// use packer
+// let packet = packer::pack!(ivalue, fvalue, "string value!");
+// let result = packer::unpack!(packet, i32, f32, str);
+// match result {
+//      None => {}
+//      (iv, fv, s) => {
+//          println!("unpack value");
+//      }
+// }
 
 pub struct Packet {
     pub buffer: Vec<u8>,
@@ -24,7 +32,7 @@ impl Packet {
     }
 }
 
-#[macro_export]
+//#[macro_export]
 macro_rules! BuildPacker {
     ($type: ty) => {
         impl PackTo for $type {
@@ -35,7 +43,7 @@ macro_rules! BuildPacker {
     };
 }
 
-#[macro_export]
+// #[macro_export]
 macro_rules! BuildUnpacker {
     ($type: ty) => {
         impl UnpackFrom for $type {
@@ -54,6 +62,53 @@ macro_rules! BuildUnpacker {
             }
         }
     }
+}
+
+#[macro_export]
+macro_rules! pack {
+    ($($expr: expr), *) => {{
+        let mut packet = crate::packer::Packet::new();
+        $(
+            $expr.pack_to(&mut packet);
+        )*
+        packet
+    }};
+}
+
+#[macro_export]
+macro_rules! gen_values {
+    ($packet: ident, $none_value: ident, ($($values: tt),* ), $head: ty, $($tails: ty),* ) => {{
+        let result = <$head>::unpack_from(&mut $packet);
+        if let Some(value) = result {
+            gen_values!($packet, $none_value, ($($values,)* value), $($tails),* )
+        } else {
+            $none_value
+        }
+    }};
+
+    ($packet: ident, $none_value: ident, ($($values: tt), *), $head: ty ) => {{
+        let result = <$head>::unpack_from(&mut $packet);
+        if let Some(value) = result {
+            Some(($($values,)* value))
+        } else {
+            $none_value
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! tuple_append {
+    (($($values: tt), *), $tail: tt) => {
+        ($($values,)* $tail)
+    }
+}
+
+#[macro_export]
+macro_rules! unpack {
+    ($packet: ident, $($types: ty),* ) => {{
+        let none_value = Option::<($($types, )*)>::None;
+        gen_values!($packet, none_value, (), $($types),* )
+    }}
 }
 
 // build packer
@@ -81,7 +136,6 @@ BuildUnpacker!(u64);
 BuildUnpacker!(usize);
 BuildUnpacker!(f32);
 BuildUnpacker!(f64);
-
 
 impl PackTo for str {
     fn pack_to(&self, packet: &mut Packet) {

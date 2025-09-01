@@ -3,7 +3,6 @@ mod packer;
 use packer::PackTo;
 use packer::UnpackFrom;
 
-
 fn main() {
     println!("Hello, world!");
 
@@ -17,4 +16,12 @@ fn main() {
     let f = f32::unpack_from(&mut packet);
     let s = String::unpack_from(&mut packet);
     println!("unpack: {}, {}, {}", i.unwrap(), f.unwrap(), s.unwrap());
+
+    let mut pack2 = pack!(22_i32, 1.7_f32, "string data!!!!");
+    let result = unpack!(pack2, i32, f32, String);
+    if let None = result {
+        panic!("invalid result!!!");
+    }
+    let (ii, ff, ss) = result.unwrap();
+    println!("unwrap: {}, {}, {}", ii, ff, ss);
 }
