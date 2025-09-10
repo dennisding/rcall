@@ -1,7 +1,7 @@
 
 // use packer
 // let packet = packer::pack!(ivalue, fvalue, "string value!");
-// let result = packer::unpack!(packet, i32, f32, str);
+// let result = packer::unpack!(packet, i32, f32, String);
 // match result {
 //      None => {}
 //      (iv, fv, s) => {
@@ -24,9 +24,14 @@ pub trait UnpackFrom {
 }
 
 impl Packet {
-    pub fn new() -> Self {
+    pub fn new(len: usize) -> Self {
+        let mut buffer = Vec::<u8>::with_capacity(len);
+        unsafe {
+            buffer.set_len(len);
+        }
+
         Packet {
-            buffer: Vec::new(),
+            buffer,
             index: 0
         }
     }
@@ -67,7 +72,7 @@ macro_rules! BuildUnpacker {
 #[macro_export]
 macro_rules! pack {
     ($($expr: expr), *) => {{
-        let mut packet = crate::packer::Packet::new();
+        let mut packet = crate::packer::Packet::new(0);
         $(
             $expr.pack_to(&mut packet);
         )*
@@ -80,7 +85,7 @@ macro_rules! gen_values {
     ($packet: ident, $none_value: ident, ($($values: tt),* ), $head: ty, $($tails: ty),* ) => {{
         let result = <$head>::unpack_from(&mut $packet);
         if let Some(value) = result {
-            gen_values!($packet, $none_value, ($($values,)* value), $($tails),* )
+            crate::gen_values!($packet, $none_value, ($($values,)* value), $($tails),* )
         } else {
             $none_value
         }
@@ -106,8 +111,8 @@ macro_rules! tuple_append {
 #[macro_export]
 macro_rules! unpack {
     ($packet: ident, $($types: ty),* ) => {{
-        let none_value = Option::<($($types, )*)>::None;
-        gen_values!($packet, none_value, (), $($types),* )
+        let none_value = Option::<($($types),*)>::None;
+        crate::gen_values!($packet, none_value, (), $($types),* )
     }}
 }
 

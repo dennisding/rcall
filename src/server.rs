@@ -1,47 +1,228 @@
 
+pub mod packer;
 mod protocols;
+mod network;
 
-struct ClientRemote {
+use std::net::SocketAddr;
+use std::collections::HashMap;
+
+use tokio;
+use tokio::io::{AsyncWriteExt, AsyncReadExt};
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::sync::mpsc;
+use packer::{PackTo, UnpackFrom};
+
+enum Message {
+    Accept,
+    Quit,
+    Connected(Connection),
+    Disconnected(usize),
+    PacketReceived(usize, packer::Packet)
+}
+
+struct ServerImp {
 
 }
 
-impl ClientRemote {
-    fn new() -> Self {
-        ClientRemote {
-
-        }
-    }
-}
-
-impl protocols::Client for ClientRemote {
-    fn hello_from_server(&self, msg: &str) {
-        println!("hello_from_server: {}", msg);
-    }
-}
-
-struct Services {
-}
-
-impl Services {
-    fn remote(&self) -> Box<dyn protocols::Client> {
-        return Box::new(ClientRemote::new());
-    }
-}
-
-impl protocols::Server for Services {
+impl protocols::Server for ServerImp {
     fn hello_from_client(&self, msg: &str) {
         println!("hello_from_client: {}", msg);
     }
 
     fn login(&self, name: &str, password: &str) {
-        println!("login: name {}, password {}", name, password);
+        println!("login: {}, {}", name, password);
+    }
+}
 
-        self.remote().hello_from_server("msg");
+struct Connection {
+    id: usize,
+    writer: OwnedWriteHalf,
+    addr: SocketAddr,
+}
+
+impl Connection {
+    pub fn new(id: usize, addr: SocketAddr, writer: OwnedWriteHalf) -> Self{
+        Connection {
+            id,
+            addr,
+            writer,
+        }
+    }
+
+    pub fn on_packet_received(&mut self, mut packet: packer::Packet) {
+        let rpc_id_option = i16::unpack_from(&mut packet);
+        if let Some(rpc_id) = rpc_id_option {
+            self.dispatch_rpc(rpc_id, packet);
+        }
+    }
+
+    fn dispatch_rpc(&mut self, rpc_id: i16, mut packet: packer::Packet) {
+        match rpc_id {
+            1 => { // hello from client
+                if let Some((msg)) = crate::unpack!(packet, String) {
+                    // self.xxx.hello_from_client(msg) 
+                    println!("call hello from client!!!!!");
+                }
+            }
+            2 => {
+                if let Some((name, password)) = crate::unpack!(packet, String, String) {
+                    // self.xxx.login(name, password)
+                    println!("login: {}, {}", name, password);
+                }
+            }
+            _ => {
+                println!("invalid rpc id: {}", rpc_id);
+            }
+        }
+    }
+}
+
+struct Server {
+    sender: mpsc::Sender<Message>,
+    receiver: mpsc::Receiver<Message>,
+    connections: HashMap<usize, Connection>
+}
+
+impl Server {
+    pub fn new() -> Self {
+        let (sender, receiver) = mpsc::channel::<Message>(1024);
+        Server {
+            sender,
+            receiver,
+            connections: HashMap::new(),
+        }
+    }
+
+    pub fn serve_at(&mut self, port: i32) {
+        tokio::spawn(Self::listen(port, self.sender.clone()));
+    }
+
+    pub fn serve_forever(&mut self, port: i32) {
+        tokio::spawn(Self::listen(port, self.sender.clone()));
+
+        loop {
+            let result = self.receiver.blocking_recv();
+            match result {
+                Some(Message::Connected(connection)) => {
+                    self.new_connection(connection);
+                },
+                Some(Message::PacketReceived(connect_id, packet)) => {
+                    self.on_packet_received(connect_id, packet);
+                },
+                _ => {
+                    println!("unhandle message!");
+                }
+            }
+        }
+    }
+
+    fn new_connection(&mut self, connection: Connection) {
+        println!("new_connection: [{}]{}", connection.id, connection.addr);
+        self.connections.insert(connection.id, connection);
+    }
+
+    fn on_packet_received(&mut self, connect_id: usize, packet: packer::Packet) {
+        println!("on_packet_received: {}, length: {}", connect_id, packet.buffer.len());
+        if let Some(connection) = self.connections.get_mut(&connect_id) {
+            connection.on_packet_received(packet);
+        } else {
+            println!("invalid connect id: {}", connect_id);
+        }
+    }
+
+    async fn listen(port: i32, sender: mpsc::Sender<Message>) {
+        let addr = format!("127.0.0.1:{}", port);
+        let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+
+        let mut index: usize = 100;
+        loop {
+            let id = index;
+            index = index + 1;
+
+            let (stream, addr) = listener.accept().await.unwrap();
+            let (reader, writer) = stream.into_split();
+
+            let connection = Connection::new(id, addr, writer);
+            let _ = sender.send(Message::Connected(connection)).await;
+
+            tokio::spawn(Self::process_read(id, reader, sender.clone()));
+        }
+    }
+
+    async fn process_read(connect_id: usize, mut reader: OwnedReadHalf, sender: mpsc::Sender<Message>) {
+        loop {
+            let len_result = reader.read_i32().await;
+            if let Ok(len) = len_result {
+                let mut packet = packer::Packet::new(len as usize);
+
+                let read_result = reader.read_exact(packet.buffer.as_mut_slice()).await;
+                if let Ok(_) = read_result {
+                    let _ = sender.send(Message::PacketReceived(connect_id, packet)).await;
+                } else {
+                    let _ = sender.send(Message::Disconnected(connect_id)).await;
+                }
+            }
+            else {
+                break;
+            }
+        }
+    }
+
+}
+
+struct ConnectionImpl {
+    name: String,
+}
+
+impl ConnectionImpl {
+    pub fn new() -> Self {
+        ConnectionImpl {
+            name: String::from("name!!!")
+        }
+    }
+}
+
+impl protocols::Server for ConnectionImpl {
+    fn hello_from_client(&self, msg: &str) {
+        println!("hello_from_client: {}", msg);
+    }
+
+    fn login(&self, name: &str, password: &str) {
+        println!("login: {}, {}", name, password);
+    }
+}
+
+struct ServerImpl {
+}
+
+impl ServerImpl {
+    pub fn new() -> Self {
+        ServerImpl {
+
+        }
+    }
+}
+
+impl network::Server for ServerImpl {
+    type ConnectType = ConnectionImpl;
+    fn new_connection(&self) -> Self::ConnectType {
+        ConnectionImpl::new()
+    }
+
+    fn on_connected(&self, connection: &Self::ConnectType) {
+        println!("on_connected!");
+    }
+
+    fn on_disconnected(&self, connection: &Self::ConnectType) {
+        println!("on_disconnected!");
     }
 }
 
 fn main() {
     println!("hello server");
+//    let mut server = Server::new();
+
+//    server.serve_at(999);
+    let mut server = crate::services!(protocols::Client, protocols::Server, ServerImpl::new());
+    server.serve_forever(999, ServerImpl::new());
 }
-
-
