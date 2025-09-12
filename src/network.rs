@@ -1,5 +1,4 @@
 use crate::packer;
-
 use std::net::SocketAddr;
 use std::collections::HashMap;
 
@@ -11,7 +10,7 @@ use tokio::sync::mpsc;
 use packer::{PackTo, UnpackFrom};
 
 pub trait Server {
-    type ConnectType;
+    type ConnectType : RpcDispatcher;
     fn on_connected(&self, connection: &Self::ConnectType);
     fn on_disconnected(&self, connection: &Self::ConnectType);
     fn new_connection(&self) -> Self::ConnectType;
@@ -25,19 +24,35 @@ enum Message {
     PacketReceived(usize, packer::Packet)
 }
 
-pub struct Services {
-    sender: mpsc::Sender<Message>,
-    receiver: mpsc::Receiver<Message>,
-    connections: HashMap<usize, Connection>,
+struct ConnectionInfo<T: RpcDispatcher> {
+    processor: T,
+    connection: Connection
 }
 
-impl Services {
+impl<T: RpcDispatcher> ConnectionInfo<T> {
+    pub fn new(processor: T, connection: Connection) -> Self {
+        ConnectionInfo {
+            processor,
+            connection
+        }
+    }
+}
+
+pub struct Services<T: Server> {
+    sender: mpsc::Sender<Message>,
+    receiver: mpsc::Receiver<Message>,
+    connections: HashMap<usize, ConnectionInfo<T::ConnectType>>,
+    server: Option<T>
+}
+
+impl<T: Server + 'static> Services<T> {
     pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel::<Message>(1024);
         Services {
             sender,
             receiver,
             connections: HashMap::new(),
+            server: None
         }
     }
 
@@ -45,8 +60,12 @@ impl Services {
         tokio::spawn(Self::listen(port, self.sender.clone()));
     }
 
-    pub fn serve_forever(&mut self, port: i32, services: impl Server) {
-        tokio::spawn(Self::listen(port, self.sender.clone()));
+    pub fn serve_forever(&mut self, port: i32, services: T) {
+        self.server = Some(services);
+
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+
+        runtime.spawn(Self::listen(port, self.sender.clone()));
 
         loop {
             let result = self.receiver.blocking_recv();
@@ -57,6 +76,8 @@ impl Services {
                 Some(Message::PacketReceived(connect_id, packet)) => {
                     self.on_packet_received(connect_id, packet);
                 },
+                Some(Message::Disconnected(connect_id)) => {
+                },
                 _ => {
                     println!("unhandle message!");
                 }
@@ -66,13 +87,19 @@ impl Services {
 
     fn new_connection(&mut self, connection: Connection) {
         println!("new_connection: [{}]{}", connection.id, connection.addr);
-        self.connections.insert(connection.id, connection);
+        let processor = self.server.as_ref().unwrap().new_connection();
+        let info = ConnectionInfo::new(processor, connection);
+
+        self.connections.insert(info.connection.id, info);
+        // self.connections.insert(connection.id, connection);
     }
 
     fn on_packet_received(&mut self, connect_id: usize, packet: packer::Packet) {
         println!("on_packet_received: {}, length: {}", connect_id, packet.buffer.len());
-        if let Some(connection) = self.connections.get_mut(&connect_id) {
-            connection.on_packet_received(packet);
+        if let Some(info) = self.connections.get_mut(&connect_id) {
+            info.processor.dispatch_rpc(1, packet);
+            //info.connection.on_packet_received(packet);
+//            connection.on_packet_received(packet);
         } else {
             println!("invalid connect id: {}", connect_id);
         }
@@ -117,7 +144,7 @@ impl Services {
     }
 }
 
-struct Connection {
+pub struct Connection {
     id: usize,
     writer: OwnedWriteHalf,
     addr: SocketAddr,
@@ -160,10 +187,22 @@ impl Connection {
     }
 }
 
+pub trait RpcDispatcher {
+    fn dispatch_rpc(&mut self, rpc_id: i16, packet: packer::Packet);
+}
+
 #[macro_export]
 macro_rules! services {
-    ($client: expr, $server: expr, $services_imp: expr) => {{
+    ($client: expr, $server: path) => {{
         let services = crate::network::Services::new();
+
+        // impl<T: $server> crate::network::RpcDispatcher for T {
+        //     fn dispatch_rpc(&mut self, rpc_id: i16, packet: packer::Packet) {
+        //         self.login("name", "password!");
+        //         self.hello_from_client("msg from client!");
+        //     }
+        // }
+
         services
     }};
 }

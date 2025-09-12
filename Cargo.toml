@@ -15,5 +15,10 @@ path = "src/client.rs"
 name = "server"
 path = "src/server.rs"
 
+[lib]
+name = "rcall"
+path = "src/lib.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
+rcall_macro = { path = "../rcall_macro"}
