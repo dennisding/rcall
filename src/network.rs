@@ -60,13 +60,7 @@ impl<T: Server + 'static> Services<T> {
         tokio::spawn(Self::listen(port, self.sender.clone()));
     }
 
-    pub fn serve_forever(&mut self, port: i32, services: T) {
-        self.server = Some(services);
-
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-
-        runtime.spawn(Self::listen(port, self.sender.clone()));
-
+    async fn do_serve(&mut self, port: i32, services: T ) {
         loop {
             let result = self.receiver.blocking_recv();
             match result {
@@ -74,7 +68,33 @@ impl<T: Server + 'static> Services<T> {
                     self.new_connection(connection);
                 },
                 Some(Message::PacketReceived(connect_id, packet)) => {
-                    self.on_packet_received(connect_id, packet);
+                    self.on_packet_received(connect_id, packet).await;
+                },
+                Some(Message::Disconnected(connect_id)) => {
+                },
+                _ => {
+                    println!("unhandle message!");
+                }
+            }
+        }
+    }
+
+    pub async fn serve_forever(&mut self, port: i32, services: T) {
+        self.server = Some(services);
+
+        // let runtime = tokio::runtime::Runtime::new().unwrap();
+
+        // runtime.spawn(Self::listen(port, self.sender.clone()));
+        tokio::spawn(Self::listen(port, self.sender.clone()));
+
+        loop {
+            let result = self.receiver.recv().await;
+            match result {
+                Some(Message::Connected(connection)) => {
+                    self.new_connection(connection);
+                },
+                Some(Message::PacketReceived(connect_id, packet)) => {
+                    self.on_packet_received(connect_id, packet).await;
                 },
                 Some(Message::Disconnected(connect_id)) => {
                 },
@@ -94,10 +114,10 @@ impl<T: Server + 'static> Services<T> {
         // self.connections.insert(connection.id, connection);
     }
 
-    fn on_packet_received(&mut self, connect_id: usize, packet: packer::Packet) {
+    async fn on_packet_received(&mut self, connect_id: usize, packet: packer::Packet) {
         println!("on_packet_received: {}, length: {}", connect_id, packet.buffer.len());
         if let Some(info) = self.connections.get_mut(&connect_id) {
-            info.processor.dispatch_rpc(1, packet);
+            info.processor.dispatch_rpc(1, packet).await;
             //info.connection.on_packet_received(packet);
 //            connection.on_packet_received(packet);
         } else {
@@ -158,50 +178,19 @@ impl Connection {
             writer,
         }
     }
-
-    pub fn on_packet_received(&mut self, mut packet: packer::Packet) {
-        let rpc_id_option = i16::unpack_from(&mut packet);
-        if let Some(rpc_id) = rpc_id_option {
-            self.dispatch_rpc(rpc_id, packet);
-        }
-    }
-
-    fn dispatch_rpc(&mut self, rpc_id: i16, mut packet: packer::Packet) {
-        match rpc_id {
-            1 => { // hello from client
-                if let Some((msg)) = crate::unpack!(packet, String) {
-                    // self.xxx.hello_from_client(msg) 
-                    println!("call hello from client!!!!!");
-                }
-            }
-            2 => {
-                if let Some((name, password)) = crate::unpack!(packet, String, String) {
-                    // self.xxx.login(name, password)
-                    println!("login: {}, {}", name, password);
-                }
-            }
-            _ => {
-                println!("invalid rpc id: {}", rpc_id);
-            }
-        }
+    
+    pub fn disconnect(&mut self) {
     }
 }
 
 pub trait RpcDispatcher {
-    fn dispatch_rpc(&mut self, rpc_id: i16, packet: packer::Packet);
+    async fn dispatch_rpc(&mut self, rpc_id: i32, packet: packer::Packet);
 }
 
 #[macro_export]
 macro_rules! services {
     ($client: expr, $server: path) => {{
         let services = crate::network::Services::new();
-
-        // impl<T: $server> crate::network::RpcDispatcher for T {
-        //     fn dispatch_rpc(&mut self, rpc_id: i16, packet: packer::Packet) {
-        //         self.login("name", "password!");
-        //         self.hello_from_client("msg from client!");
-        //     }
-        // }
 
         services
     }};

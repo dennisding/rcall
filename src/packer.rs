@@ -4,7 +4,7 @@
 // let result = packer::unpack!(packet, i32, f32, String);
 // match result {
 //      None => {}
-//      (iv, fv, s) => {
+//      Some((iv, fv, s)) => {
 //          println!("unpack value");
 //      }
 // }
