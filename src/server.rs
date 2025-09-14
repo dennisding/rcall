@@ -5,6 +5,7 @@ pub mod packer;
 mod protocols;
 mod network;
 
+#[derive(rcall::Protocol)]
 struct ConnectionImpl {
     name: String,
 }
@@ -17,11 +18,11 @@ impl ConnectionImpl {
     }
 }
 
-impl network::RpcDispatcher for ConnectionImpl {
-    async fn dispatch_rpc(&mut self, rpc_id: i32, packet: packer::Packet) {
-        self._dispatch_rpc(rpc_id, packet);
-    }
-}
+// impl network::RpcDispatcher for ConnectionImpl {
+//     async fn dispatch_rpc(&mut self, rpc_id: i32, packet: crate::packer::Packet) {
+//         self._dispatch_rpc(rpc_id, packet);
+//     }
+// }
 
 impl protocols::Server for ConnectionImpl {
     async fn hello_from_client(&mut self, msg: String) {

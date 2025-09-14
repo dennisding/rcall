@@ -1,8 +1,9 @@
 use rcall;
-use crate::packer;
+//use crate::packer;
 
-use packer::{PackTo, UnpackFrom};
+use crate::packer::{PackTo, UnpackFrom};
 
+#[rcall::protocol]
 pub trait Client {
     async fn hello_from_server(&mut self, msg: String);
 }

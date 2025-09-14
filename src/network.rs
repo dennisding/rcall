@@ -7,7 +7,7 @@ use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::mpsc;
 
-use packer::{PackTo, UnpackFrom};
+use crate::packer::{PackTo, UnpackFrom};
 
 pub trait Server {
     type ConnectType : RpcDispatcher;
@@ -184,7 +184,7 @@ impl Connection {
 }
 
 pub trait RpcDispatcher {
-    async fn dispatch_rpc(&mut self, rpc_id: i32, packet: packer::Packet);
+    async fn dispatch_rpc(&mut self, rpc_id: i32, packet: crate::packer::Packet);
 }
 
 #[macro_export]
