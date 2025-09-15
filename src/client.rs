@@ -1,9 +1,13 @@
 
-pub use rcall;
+//pub use rcall;
 
+use tokio;
+
+//mod client_impl;
 mod protocols;
-mod packer;
-mod network;
+//mod packer;
+//mod network;
+use rcall::{self, network};
 
 use protocols::Client;
 
@@ -20,10 +24,26 @@ impl ClientImpl {
     }
 }
 
+impl network::Client for ClientImpl {
+    fn on_connected(&mut self) {
+        println!("on client connected");
+    }
+
+    fn on_disconnected(&mut self) {
+        println!("on client disconnected");
+    }
+}
+
 impl protocols::Client for ClientImpl {
     async fn hello_from_server(&mut self, msg: String) {
         println!("hello from server!!!!{}", msg);
     }
+}
+
+async fn do_connection() {
+    let client_impl = ClientImpl::new();
+    let mut client = rcall::Client::new(client_impl);
+    client.connect(String::from("127.0.0.1"), 999);
 }
 
 fn main() {
@@ -31,14 +51,17 @@ fn main() {
     // let client_impl = ClientImpl::new()
     // let mut client = rcall::Client::new(client_impl);
     // client.connect(ip, port);
-    let mut _runtime = tokio::runtime::Runtime::new();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let client_impl = ClientImpl::new();
+//    runtime
+    runtime.spawn(do_connection());
 
-    let mut client = rcall::Client::new();
-    client.connect(String::from("127.0.0.1"), 999);
+    // let client_impl = ClientImpl::new();
+    // let mut client = rcall::Client::new(client_impl);
+    // client.connect(String::from("127.0.0.1"), 999);
 
     loop {
-        let _ = tokio::time::sleep(tokio::time::Duration::from_nanos(1));
+        std::thread::sleep(std::time::Duration::from_nanos(1));
+//        let _ = tokio::time::sleep(tokio::time::Duration::from_nanos(1));
     }
 }

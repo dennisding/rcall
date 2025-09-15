@@ -1,9 +1,11 @@
-use crate::protocols::Server;
+//use crate::protocols::Server;
 
 
-pub mod packer;
+// pub mod packer;
 mod protocols;
-mod network;
+use protocols::{Server};
+//mod network;
+use rcall::{self};
 
 #[derive(rcall::Protocol)]
 struct ConnectionImpl {
@@ -45,7 +47,7 @@ impl ServerImpl {
     }
 }
 
-impl network::Server for ServerImpl {
+impl rcall::network::Server for ServerImpl {
     type ConnectType = ConnectionImpl;
     fn new_connection(&self) -> Self::ConnectType {
         ConnectionImpl::new()
@@ -61,7 +63,7 @@ impl network::Server for ServerImpl {
 }
 
 async fn do_serve() {
-    let mut server = crate::services!(protocols::Client, protocols::Server);
+    let mut server = rcall::services!(protocols::Client, protocols::Server);
     server.serve_forever(999, ServerImpl::new()).await;
 }
 

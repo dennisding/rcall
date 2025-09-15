@@ -16,6 +16,11 @@ pub trait Server {
     fn new_connection(&self) -> Self::ConnectType;
 }
 
+pub trait Client {
+    fn on_connected(&mut self);
+    fn on_disconnected(&mut self);
+}
+
 enum Message {
     Accept,
     Quit,
@@ -190,7 +195,7 @@ pub trait RpcDispatcher {
 #[macro_export]
 macro_rules! services {
     ($client: expr, $server: path) => {{
-        let services = crate::network::Services::new();
+        let services = rcall::network::Services::new();
 
         services
     }};

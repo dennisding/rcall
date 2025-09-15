@@ -1,7 +1,10 @@
 
-mod packer;
-use packer::PackTo;
-use packer::UnpackFrom;
+// mod packer;
+// use packer::PackTo;
+// use packer::UnpackFrom;
+
+use rcall::{self, packer};
+use packer::{PackTo, UnpackFrom};
 
 fn main() {
     println!("Hello, world!");
@@ -19,8 +22,8 @@ fn main() {
 
     let iv = 1234;
 
-    let mut pack2 = pack!(iv, 1.7_f32, "string data!!!!");
-    let result = unpack!(pack2, i32, f32, String);
+    let mut pack2 = rcall::pack!(iv, 1.7_f32, "string data!!!!");
+    let result = rcall::unpack!(pack2, i32, f32, String);
     if let None = result {
         panic!("invalid result!!!");
     }

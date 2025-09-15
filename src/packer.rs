@@ -72,7 +72,7 @@ macro_rules! BuildUnpacker {
 #[macro_export]
 macro_rules! pack {
     ($($expr: expr), *) => {{
-        let mut packet = crate::packer::Packet::new(0);
+        let mut packet = rcall::packer::Packet::new(0);
         $(
             $expr.pack_to(&mut packet);
         )*
@@ -85,7 +85,7 @@ macro_rules! gen_values {
     ($packet: ident, $none_value: ident, ($($values: tt),* ), $head: ty, $($tails: ty),* ) => {{
         let result = <$head>::unpack_from(&mut $packet);
         if let Some(value) = result {
-            crate::gen_values!($packet, $none_value, ($($values,)* value), $($tails),* )
+            rcall::gen_values!($packet, $none_value, ($($values,)* value), $($tails),* )
         } else {
             $none_value
         }
@@ -112,7 +112,7 @@ macro_rules! tuple_append {
 macro_rules! unpack {
     ($packet: ident, $($types: ty),* ) => {{
         let none_value = Option::<($($types),*)>::None;
-        crate::gen_values!($packet, none_value, (), $($types),* )
+        rcall::gen_values!($packet, none_value, (), $($types),* )
     }}
 }
 

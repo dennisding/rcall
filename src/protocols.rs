@@ -1,7 +1,7 @@
 use rcall;
 //use crate::packer;
 
-use crate::packer::{PackTo, UnpackFrom};
+use rcall::packer::{PackTo, UnpackFrom};
 
 #[rcall::protocol]
 pub trait Client {

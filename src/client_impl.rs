@@ -1,7 +1,7 @@
 
-use tokio;
+use tokio::{self, io::AsyncWriteExt};
 
-use crate::Bichannel;
+use crate::{Bichannel, network};
 
 enum Message {
     Connect(String, i32), // ip, port
@@ -11,21 +11,22 @@ enum Message {
     SendPacket(crate::packer::Packet),
 }
 
-pub struct Client {
-    channel: Bichannel<Message>
+pub struct Client<T: network::Client> {
+    channel: Bichannel<Message>,
+    client: T,
 }
 
-impl Client {
-    pub fn new() -> Client {
-        let (channel1, channel2) = crate::bichannel::Bichannel::<Message>::new();
+impl<T: 'static + network::Client> Client<T> {
+    pub fn new(client: T) -> Self {
+        let (channel1, channel2) = crate::Bichannel::<Message>::new();
         tokio::spawn(Self::processor(channel2));
         Client{
-            channel: channel1
+            channel: channel1,
+            client
         }
     }
 
     pub fn connect(&mut self, ip: String, port: i32) {
-//        tokio::spawn(Self::processor(ip, port));
         let _ = self.channel.send(Message::Connect(ip, port));
     }
 
@@ -44,9 +45,10 @@ impl Client {
             if let Some(message) = client.channel.recv().await {
                 match message {
                     Message::Connect(ip, port) => {
-                        client.connect(ip, port);
+                        client.connect(ip, port).await;
                     }
-                    Message::SendPacket(_packet) => {
+                    Message::SendPacket(packet) => {
+                        client.send_packet(packet).await;
                     }
                     _ => {
                     }
@@ -56,23 +58,38 @@ impl Client {
     }
 }
 
-impl Drop for Client {
-    fn drop(&mut self) {
-        self.disconnect();
-    }
-}
+// impl<T: network::Client> Drop for Client<T> {
+//     fn drop(&mut self) {
+//         self.disconnect();
+//     }
+// }
 
 struct InnerClient {
-    pub channel: Bichannel<Message>
+    pub channel: Bichannel<Message>,
+    stream: Option<tokio::net::TcpStream>,
 }
 
 impl InnerClient {
     pub fn new(channel: Bichannel<Message>) -> Self {
         InnerClient {
-            channel
+            channel,
+            stream: None
         }
     }
 
-    pub fn connect(&mut self, ip: String, port: i32) {
+    pub async fn connect(&mut self, ip: String, port: i32) {
+        let addr = format!("{}:{}", ip, port);
+        let stream_result = tokio::net::TcpStream::connect(addr).await;
+        if let Ok(stream) = stream_result {
+            self.stream = Some(stream);
+        } else {
+            self.stream = None;
+        }
+    }
+
+    pub async fn send_packet(&mut self, packet: crate::packer::Packet) {
+        if let Some(stream) = &mut self.stream {
+            let _ = stream.write_all(&packet.buffer[..]).await;
+        }
     }
 }
