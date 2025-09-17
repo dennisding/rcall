@@ -29,7 +29,8 @@ struct Services {
 impl rcall::network::Services for Services {
     type ConnectType = ConnectionImpl;
     fn new_connection(&mut self) -> Self::ConnectType {
-        println!("new_connection");
+        ConnectionImpl {
+        }
     }
     fn on_connected(&mut self, connection: Self::ConnectType) {
         println!("on_connected!!!!");
@@ -50,6 +51,12 @@ impl protocols::ClientToServer {
         self.remote.login_result();
     }
 }
+
+fn main() {
+    let services = rcall::services!(protocols::Client, protocols::Server);
+    services.serve_forever_at(999, Services::new());
+}
+
 ```
 
 ## 3. implement and use the Connection for client
@@ -59,14 +66,14 @@ struct ClientImpl {
 
 }
 
-impl rcall::network::Client {
+impl rcall::network::Client for ClientImpl {
     fn on_connected(&mut self) {
         println!("on_connected");
     }
     ...
 }
 
-impl protocols::ServerToClient {
+impl protocols::ServerToClient for ClientImpl {
     fn hello_from_server(&mut self, msg: String) {
         println!("hello_from_server: {}", msg);
         self.remote.hello_from_client("msg from client!");
@@ -75,6 +82,15 @@ impl protocols::ServerToClient {
 
     fn login_result(&mut self, result: bool) {
         println!("login result! {}", result);
+    }
+}
+
+fn main() {
+    let client = rcall::client!(protocols::ServerToClient, protocols::ClientToServer);
+    client.connect_to("127.0.0.1", 999, ClientImpl::new());
+
+    loop {
+        client.process();
     }
 }
 ```
