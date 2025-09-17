@@ -29,6 +29,7 @@ impl ConnectionImpl {
 impl protocols::Server for ConnectionImpl {
     async fn hello_from_client(&mut self, msg: String) {
         println!("hello_from_client: {}", msg);
+        // self.remote.hello_from_server(String::from("msg from server!"));
     }
 
     async fn login(&mut self, name: String, password: String) {

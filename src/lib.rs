@@ -1,5 +1,5 @@
 
-mod client_impl;
+pub mod client_impl;
 pub use client_impl::Client;
 
 mod bichannel;

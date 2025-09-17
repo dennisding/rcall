@@ -73,6 +73,7 @@ impl<T: Server + 'static> Services<T> {
                     self.new_connection(connection);
                 },
                 Some(Message::PacketReceived(connect_id, packet)) => {
+                    println!("on packet received!{}", connect_id);
                     self.on_packet_received(connect_id, packet).await;
                 },
                 Some(Message::Disconnected(connect_id)) => {
@@ -87,9 +88,6 @@ impl<T: Server + 'static> Services<T> {
     pub async fn serve_forever(&mut self, port: i32, services: T) {
         self.server = Some(services);
 
-        // let runtime = tokio::runtime::Runtime::new().unwrap();
-
-        // runtime.spawn(Self::listen(port, self.sender.clone()));
         tokio::spawn(Self::listen(port, self.sender.clone()));
 
         loop {
@@ -119,12 +117,16 @@ impl<T: Server + 'static> Services<T> {
         // self.connections.insert(connection.id, connection);
     }
 
-    async fn on_packet_received(&mut self, connect_id: usize, packet: packer::Packet) {
+    async fn on_packet_received(&mut self, connect_id: usize, mut packet: packer::Packet) {
         println!("on_packet_received: {}, length: {}", connect_id, packet.buffer.len());
         if let Some(info) = self.connections.get_mut(&connect_id) {
-            info.processor.dispatch_rpc(1, packet).await;
-            //info.connection.on_packet_received(packet);
-//            connection.on_packet_received(packet);
+            if let Some(rpc_id) = <i32>::unpack_from(&mut packet) {
+                println!("dispatch rpc: {}", rpc_id);
+                info.processor.dispatch_rpc(rpc_id, packet).await;
+            }
+            else {
+                println!("invalid rpc_id");
+            }
         } else {
             println!("invalid connect id: {}", connect_id);
         }
@@ -132,6 +134,7 @@ impl<T: Server + 'static> Services<T> {
 
     async fn listen(port: i32, sender: mpsc::Sender<Message>) {
         let addr = format!("127.0.0.1:{}", port);
+        println!("server listen!{}", addr);
         let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
 
         let mut index: usize = 100;

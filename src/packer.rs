@@ -72,6 +72,7 @@ macro_rules! BuildUnpacker {
 #[macro_export]
 macro_rules! pack {
     ($($expr: expr), *) => {{
+        use rcall::packer::PackTo;
         let mut packet = rcall::packer::Packet::new(0);
         $(
             $expr.pack_to(&mut packet);
@@ -173,6 +174,7 @@ impl UnpackFrom for String {
             let size = size as usize;
             let slice = &packet.buffer[packet.index .. packet.index + size];
             unsafe {
+                packet.index = packet.index + size;
                 return Some(String::from_utf8_unchecked(slice.to_vec()));
             }
         }
