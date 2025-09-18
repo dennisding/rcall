@@ -1,7 +1,7 @@
 
 
 use tokio;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt};
 use tokio::sync::mpsc::{self, Sender};
 use tokio::net::tcp::OwnedReadHalf;
 
@@ -96,9 +96,7 @@ impl<T: ClientServices + crate::RpcDispatcher> Client<T> {
     }
 
     fn clean_connection(&mut self) {
-        if let Some(writer) = &mut self.writer {
-            self.writer = None;
-        }
+        self.writer = None;
     }
 
     fn dispatch_message(&mut self, msg: Message) {

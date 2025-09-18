@@ -1,5 +1,3 @@
-use crate::{UnpackFrom};
-
 use std::net::SocketAddr;
 use std::collections::HashMap;
 
@@ -82,7 +80,7 @@ impl<T: Services> Server<T> {
         self.services.on_connected(info);
     }
 
-    fn on_send_packet(&mut self, connect_id: crate::ConnectId, mut packet: crate::Packet) {
+    fn on_send_packet(&mut self, connect_id: crate::ConnectId, packet: crate::Packet) {
         match self.connections.get_mut(&connect_id) {
             Some(info) => {
                 let size = packet.buffer.len() as crate::PacketLenType;
