@@ -84,6 +84,7 @@ macro_rules! pack {
 #[macro_export]
 macro_rules! gen_values {
     ($packet: ident, $none_value: ident, ($($values: tt),* ), $head: ty, $($tails: ty),* ) => {{
+        use rcall::{UnpackFrom};
         let result = <$head>::unpack_from(&mut $packet);
         if let Some(value) = result {
             rcall::gen_values!($packet, $none_value, ($($values,)* value), $($tails),* )
@@ -93,6 +94,7 @@ macro_rules! gen_values {
     }};
 
     ($packet: ident, $none_value: ident, ($($values: tt), *), $head: ty ) => {{
+        use rcall::{UnpackFrom};
         let result = <$head>::unpack_from(&mut $packet);
         if let Some(value) = result {
             Some(($($values,)* value))

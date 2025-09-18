@@ -1,149 +1,162 @@
 
-use tokio::{self, io::AsyncWriteExt};
 
-use crate::{bichannel, network, Bichannel};
+use tokio;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::mpsc::{self, Sender};
+use tokio::net::tcp::OwnedReadHalf;
 
 pub enum Message {
-    Test,
     Connect(String, i32), // ip, port
     Connected,
     Disconnect,
     Disconnected,
-    SendPacket(crate::packer::Packet),
+    SendPacket(crate::Packet),
+    ReceivePacket(crate::Packet)
 }
 
-pub struct Client<T: network::Client> {
-    channel: Bichannel<Message>,
-    processor: Option<T>,
+pub trait ClientServices {
+    fn on_connected(&mut self);
+    fn on_disconnected(&mut self);
 }
 
-pub struct Sender {
-    sender: bichannel::Sender<Message>
+pub struct ClientSender {
+    sender: mpsc::Sender<Message>
 }
 
-impl Sender {
-    pub fn new(sender: bichannel::Sender<Message>) -> Self {
-        Sender {
-            sender
+impl ClientSender {
+    pub fn new(sender: mpsc::Sender<Message>) -> Self {
+        ClientSender {
+            sender,
         }
     }
 
-    pub fn send(&self, packet: crate::packer::Packet) {
-        println!("send packet message!!!!");
-        self.sender.send(Message::SendPacket(packet));
-    }
-}
-
-async fn processor(channel: Bichannel<Message>) {
-    let mut client = InnerClient::new(channel);
-    loop {
-        if let Some(message) = client.channel.recv().await {
-            match message {
-                Message::Connect(ip, port) => {
-                    println!("connect: {}: {}", ip, port);
-                    client.connect(ip, port).await;
-                }
-                Message::SendPacket(packet) => {
-                    println!("send packet!!!");
-                    client.send_packet(packet).await;
-                }
-                Message::Test => {
-                    println!("test");
-                }
-                _ => {
-                    println!("unhandle msg!");
-                }
-            }
+    pub fn send(&mut self, packet: crate::Packet) {
+        if let Err(err) = self.sender.try_send(Message::SendPacket(packet)) {
+            println!("error in client send: err = {}", err);
         }
     }
 }
 
-impl<T: network::Client> Client<T> {
+pub struct Client<T: ClientServices + crate::RpcDispatcher> {
+    sender: mpsc::Sender<Message>,
+    receiver: mpsc::Receiver<Message>,
+    dispatcher: Option<T>,
+    runtime: tokio::runtime::Runtime,
+    writer: Option<tokio::net::tcp::OwnedWriteHalf>
+}
+
+impl<T: ClientServices + crate::RpcDispatcher> Client<T> {
     pub fn new() -> Self {
-        let (channel1, channel2) = crate::Bichannel::<Message>::new(512);
-        tokio::spawn(processor(channel2));
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let (sender, receiver) = mpsc::channel::<Message>(crate::CHANNEL_SIZE);
         Client {
-            channel: channel1,
-            processor: None
+            sender,
+            receiver,
+            dispatcher: None,
+            runtime,
+            writer: None
         }
     }
 
-    pub fn new_sender(&self) -> Sender {
-        Sender::new(self.channel.clone_sender())
+    pub fn set_dispatcher(&mut self, dispatcher: T) {
+        self.dispatcher = Some(dispatcher);
     }
 
-    pub fn set_processor(&mut self, processor: T) {
-        self.processor = Some(processor);
+    pub fn new_sender(&mut self) -> ClientSender {
+        ClientSender::new(self.sender.clone())
     }
 
-    pub fn connect(&self, ip: String, port: i32) {
-        if let Err(err) = self.channel.send(Message::Connect(ip, port)) {
-            println!("error in connect:{}", err);
+    pub fn connect(&mut self, ip: String, port: i32) {
+        self.clean_connection();
+
+        let addr = format!("{}:{}", ip, port);
+        let stream = self.runtime.block_on(async {
+            tokio::net::TcpStream::connect(addr).await.unwrap()
+        });
+        let (reader, writer) = stream.into_split();
+        self.writer = Some(writer);
+
+        self.runtime.spawn(client_reader(self.sender.clone(), reader));
+    }
+
+    pub fn poll(&mut self) {
+        // not connected!!!
+        if let None = self.writer {
+            return;
         }
-    }
 
-    pub fn disconnect(&self) {
-        // blocking reading
-        if let Err(err) = self.channel.send(Message::Disconnect) {
-            println!("error in disconnect:{}", err);
-        }
-    }
-
-    pub fn send(&self, packet: super::packer::Packet) {
-        let _ = self.channel.send(Message::SendPacket(packet));
-    }
-
-    pub async fn tick(&mut self) {
-        match self.channel.recv().await {
-            Some(Message::Disconnected) => {
-                println!("disconnected");
+        loop {
+            if let Ok(msg) = self.receiver.try_recv() {
+                self.dispatch_message(msg);
             }
-            Some(Message::Test) => {
-                println!("test");
+            else {
+                break;
             }
-            Some(Message::Connected) => {
-                if let Some(processor) = &mut self.processor {
-                    processor.on_connected();
-                }
+        }
+    }
+
+    fn clean_connection(&mut self) {
+        if let Some(writer) = &mut self.writer {
+            self.writer = None;
+        }
+    }
+
+    fn dispatch_message(&mut self, msg: Message) {
+        match msg {
+            Message::Connected => {
+                self.dispatcher.as_mut().unwrap().on_connected();
+            }
+            Message::SendPacket(packet) => {
+                self.send_packet(packet);
+            }
+            Message::ReceivePacket(packet) => {
+                self.dispatcher.as_mut().unwrap().dispatch_rpc(packet);
             }
             _ => {
                 println!("unhandle message");
-//                println!("unhandle");
+            }
+        }
+    }
+
+    fn send_packet(&mut self, packet: crate::Packet) {
+        if let Some(writer) = &self.writer {
+            let size = packet.buffer.len() as crate::PacketLenType;
+            if let Err(err) = writer.try_write(&size.to_ne_bytes()) {
+                println!("error in sending packet: err={}", err);
+                return;
+            }
+
+            if let Err(err) = writer.try_write(&packet.buffer) {
+                println!("err in send packet data: {}", err);
             }
         }
     }
 }
 
-struct InnerClient {
-    pub channel: Bichannel<Message>,
-    stream: Option<tokio::net::TcpStream>,
-}
-
-impl InnerClient {
-    pub fn new(channel: Bichannel<Message>) -> Self {
-        InnerClient {
-            channel,
-            stream: None
-        }
+async fn client_reader(sender: Sender<Message>, mut reader: OwnedReadHalf) {
+    if let Err(err) = sender.send(Message::Connected).await {
+        println!("error in send Message::Connected: {}", err);
     }
 
-    pub async fn connect(&mut self, ip: String, port: i32) {
-        let addr = format!("{}:{}", ip, port);
-        let stream_result = tokio::net::TcpStream::connect(addr).await;
-        if let Ok(stream) = stream_result {
-            self.stream = Some(stream);
-            let _ = self.channel.send(Message::Connected);
-        } else {
-            println!("unable to connect to: {}", format!("{}:{}", ip, port));
-            self.stream = None;
+    loop {
+        let mut buffer = [0u8; std::mem::size_of::<crate::PacketLenType>()];
+        if let Err(err) = reader.read_exact(&mut buffer).await {
+            println!("error in read packet len: {}", err);
+            break;
+        }
+        let len = <crate::PacketLenType>::from_ne_bytes(buffer);
+        let mut packet = crate::Packet::new(len as usize);
+
+        if let Err(err) = reader.read_exact(&mut packet.buffer).await {
+            println!("error in read packet data:{}", err);
+            break;
+        }
+
+        if let Err(err) = sender.send(Message::ReceivePacket(packet)).await {
+            println!("error in send Message::ReceivePacket: err = {}", err);
         }
     }
-
-    pub async fn send_packet(&mut self, packet: crate::packer::Packet) {
-        println!("send packet: len: {}", packet.buffer.len() as i32);
-        if let Some(stream) = &mut self.stream {
-            let _ = stream.write_i32(packet.buffer.len() as i32).await;
-            let _ = stream.write_all(&packet.buffer[..]).await;
-        }
+    if let Err(err) = sender.send(Message::Disconnected).await {
+        println!("error in send Message::Disconnect: err = {}", err);
     }
 }

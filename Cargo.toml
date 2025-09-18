@@ -3,9 +3,9 @@ name = "rcall"
 version = "0.1.0"
 edition = "2024"
 
-[[bin]]
-name = "test"
-path = "src/main.rs"
+# [[bin]]
+# name = "test"
+# path = "src/main.rs"
 
 [[bin]]
 name = "client"
@@ -17,7 +17,7 @@ path = "src/server.rs"
 
 [lib]
 name = "rcall"
-path = "src/lib.rs"
+path = "src/rcall.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

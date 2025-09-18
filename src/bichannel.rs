@@ -1,6 +1,7 @@
 
 use tokio;
 use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::{TryRecvError};
 
 pub struct Bichannel<T> {
     sender: mpsc::Sender<T>,
@@ -44,16 +45,19 @@ impl<T> Bichannel<T> {
         Sender::new(self.sender.clone())
     }
 
-    pub fn send(&self, value: T) -> Result<(), mpsc::error::TrySendError<T>> {
+    pub fn send(&self, value: T) {
         // self.sender.try_send(value)
         if let Err(err) = self.sender.try_send(value) {
             println!("error in send: {}", err);
         }
-        Ok(())
     }
 
-    pub fn try_recv(&mut self) -> Result<T, mpsc::error::TryRecvError>{
-        self.receiver.try_recv()
+    pub fn try_recv(&mut self) -> Option<T> {
+        if let Ok(msg) = self.receiver.try_recv() {
+            return Some(msg);
+        }
+        
+        None
     }
 
     pub async fn recv(&mut self) -> Option<T> {
