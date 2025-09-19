@@ -14,11 +14,11 @@ readme = "README.md"
 
 [[bin]]
 name = "client"
-path = "src/client.rs"
+path = "simple_server/client.rs"
 
 [[bin]]
 name = "server"
-path = "src/server.rs"
+path = "simple_server/server.rs"
 
 [[bin]]
 name = "echo_server"
@@ -34,5 +34,5 @@ path = "src/rcall.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-rcall_macro = "0.1"
-# rcall_macro = { path = "../rcall_macro"}
+# rcall_macro = "0.2"
+rcall_macro = { path = "../rcall_macro"}

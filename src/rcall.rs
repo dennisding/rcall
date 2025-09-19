@@ -36,14 +36,15 @@ pub use packer::{Packet, PackTo, UnpackFrom};
 
 pub trait Sender {
     fn send(&mut self, packet: Packet);
+    fn close(&mut self);
 }
 
 // services trait need to be redesign
 pub trait ServerServices {
     type ConnectionType: RpcDispatcher;
-    fn new_connection(&mut self, connection: &Connection) -> Self::ConnectionType;
-    fn on_connected(&mut self, _connection: &mut ConnectionInfo<Self::ConnectionType>) {}
-    fn on_disconnected(&mut self, _connection: &Connection) {}
+    fn new_connection(&mut self, connection: &mut Connection) -> Self::ConnectionType;
+    fn on_connected(&mut self, _connection: &mut Connection, _dispatcher: &mut Self::ConnectionType) {}
+    fn on_disconnected(&mut self, _connection: &mut Connection, _dispatcher: &mut Self::ConnectionType) {}
 }
 
 pub trait RpcDispatcher {

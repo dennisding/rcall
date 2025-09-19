@@ -1,4 +1,4 @@
-use rcall;
+use rcall::{self};
 
 mod protocols;
 use protocols::{ImplInServer};
@@ -16,18 +16,16 @@ impl ServicesImpl {
 
 impl rcall::ServerServices for ServicesImpl {
     type ConnectionType = ConnectionImpl;
-    fn new_connection(&mut self, connection: &rcall::Connection) -> Self::ConnectionType {
+    fn new_connection(&mut self, connection: &mut rcall::Connection) -> Self::ConnectionType {
         let remote = ConnectionRemote::new(connection.new_sender());
         ConnectionImpl::new(remote)
     }
 
-    fn on_connected(&mut self, info: &mut rcall::ConnectionInfo<Self::ConnectionType>) {
-        let connection = &info.connection;
+    fn on_connected(&mut self, connection: &mut rcall::Connection, _dispatcher: &mut Self::ConnectionType) {
         println!("on client connected!{}, {}", connection.id, connection.addr);
-//        info.dispatcher.remote.hello_from_server("msg from server".to_string());
     }
 
-    fn on_disconnected(&mut self, connection: &rcall::Connection) {
+    fn on_disconnected(&mut self, connection: &mut rcall::Connection, _dispatcher: &mut Self::ConnectionType) {
         println!("on client disconnected!: {}, {}", connection.id, connection.addr);
     }
 }
@@ -57,6 +55,8 @@ impl protocols::ImplInServer for ConnectionImpl {
     fn login(&mut self, name: String, password: String) {
         println!("login:name[{}], password[{}]", name, password);
         self.remote.login_result(1024);
+        
+//        self.remote.close();
     }
 }
 

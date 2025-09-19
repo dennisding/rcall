@@ -56,6 +56,7 @@ impl ImplInClient for ClientImpl {
 
     fn login_result(&mut self, ok: i32) {
         println!("login_result: ok[{}]", ok);
+        self.remote.close();
     }
 }
 

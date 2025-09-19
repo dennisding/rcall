@@ -11,6 +11,7 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
 pub enum Message {
     Connected(Connection),
+    Disconnect(crate::ConnectId),
     Disconnected(crate::ConnectId),
     ReceivePacket(crate::ConnectId, crate::Packet),
     SendPacket(crate::ConnectId, crate::Packet)
@@ -51,8 +52,11 @@ impl<T: ServerServices> Server<T> {
             Message::Connected(connection) => {
                 self.on_connected(connection);
             }
+            Message::Disconnect(connect_id) => {
+                self.on_disconnect(connect_id);
+            }
             Message::Disconnected(connect_id) => {
-                println!("disconnected: {}", connect_id);
+                self.on_disconnected(connect_id);
             }
             Message::ReceivePacket(connect_id, packet) => {
                 self.on_receive_packet(connect_id, packet);
@@ -63,14 +67,14 @@ impl<T: ServerServices> Server<T> {
         }
     }
 
-    fn on_connected(&mut self, connection: Connection) {
-        let dispatcher = self.services.new_connection(&connection);
+    fn on_connected(&mut self, mut connection: Connection) {
+        let dispatcher = self.services.new_connection(&mut connection);
         let connect_id = connection.id;
         let info = ConnectionInfo::new(connection, dispatcher);
         self.connections.insert(connect_id, info);
 
         let info = self.connections.get_mut(&connect_id).unwrap();
-        self.services.on_connected(info);
+        self.services.on_connected(&mut info.connection, &mut info.dispatcher);
     }
 
     fn on_send_packet(&mut self, connect_id: crate::ConnectId, packet: crate::Packet) {
@@ -97,8 +101,24 @@ impl<T: ServerServices> Server<T> {
                 info.dispatcher.dispatch_rpc(packet);
             }
             None => {
-                println!("invalid connect id: {}", connect_id);
+                println!("invalid connect id: connect_id = {}", connect_id);
             }
+        }
+    }
+
+    fn on_disconnected(&mut self, connect_id: crate::ConnectId) {
+        if let Some(mut info) = self.connections.remove(&connect_id) {
+            self.services.on_disconnected(&mut info.connection, &mut info.dispatcher);
+        }
+    }
+
+    /// 用户主动关闭连接
+    fn on_disconnect(&mut self, connect_id: crate::ConnectId) {
+        if let Some(mut info) = self.connections.remove(&connect_id) {
+            self.services.on_disconnected(&mut info.connection, &mut info.dispatcher);
+        }
+        else {
+            println!("invalid connect_id in on_disconnect: connect_id = {}", connect_id);
         }
     }
 }
@@ -121,6 +141,11 @@ impl crate::Sender for ServerSender {
     fn send(&mut self, packet: crate::Packet) {
         if let Err(err) = self.sender.try_send(Message::SendPacket(self.id, packet)) {
             println!("error in ServerSender::send {}", err);
+        }
+    }
+    fn close(&mut self) {
+        if let Err(err) = self.sender.try_send(Message::Disconnect(self.id)) {
+            println!("error in send Message::Disconnect: {}", err);
         }
     }
 }
@@ -146,9 +171,6 @@ impl Connection {
         }
     }
     
-    pub fn disconnect(&self) {
-    }
-
     pub fn new_sender(&self) -> ServerSender {
         ServerSender::new(self.id, self.sender.clone())
     }
@@ -191,15 +213,15 @@ async fn listen_at(port: i32, sender: mpsc::Sender<Message>) {
 async fn process_read(connect_id: usize, mut reader: OwnedReadHalf, sender: mpsc::Sender<Message>) {
     loop {
         let mut buffer = [0u8; std::mem::size_of::<crate::PacketLenType>()];
-        if let Err(err) = reader.read_exact(&mut buffer).await {
-            println!("error in read packet len: {}", err);
+        if let Err(_err) = reader.read_exact(&mut buffer).await {
+//            println!("error in read packet len: {}", err);
             break;
         }
         let len = <crate::PacketLenType>::from_ne_bytes(buffer);
         let mut packet = crate::Packet::new(len as usize);
 
-        if let Err(err) = reader.read_exact(&mut packet.buffer).await {
-            println!("error in read packet data:{}", err);
+        if let Err(_err) = reader.read_exact(&mut packet.buffer).await {
+//            println!("error in read packet data:{}", err);
             break;
         }
 

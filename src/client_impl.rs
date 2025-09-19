@@ -34,6 +34,12 @@ impl crate::Sender for ClientSender {
             println!("error in client send: err = {}", err);
         }
     }
+
+    fn close(&mut self) {
+        if let Err(err) = self.sender.try_send(Message::Disconnect) {
+            println!("error in cient try_send: err = {}", err);
+        }
+    }
 }
 
 pub struct Client<T: ClientServices> {
@@ -110,6 +116,15 @@ impl<T: ClientServices> Client<T> {
             Message::SendPacket(packet) => {
                 self.send_packet(packet);
             }
+            Message::Disconnect => {
+                self.on_disconnect();
+                // self.writer = None;
+                // self.receiver.close();
+            }
+            Message::Disconnected => {
+                self.on_disconnected();
+//                self.services.on_disconnected(&mut self.dispatcher);
+            }
             Message::ReceivePacket(packet) => {
                 self.dispatcher.dispatch_rpc(packet);
 //                self.dispatcher.as_mut().unwrap().dispatch_rpc(packet);
@@ -118,6 +133,17 @@ impl<T: ClientServices> Client<T> {
                 println!("unhandle message");
             }
         }
+    }
+
+    /// 主动关闭连接
+    fn on_disconnect(&mut self) {
+        self.services.on_disconnected(&mut self.dispatcher);
+        self.writer = None;
+        self.receiver.close();
+    }
+
+    fn on_disconnected(&mut self) {
+        self.services.on_disconnected(&mut self.dispatcher);
     }
 
     fn send_packet(&mut self, packet: crate::Packet) {
@@ -142,23 +168,25 @@ async fn client_reader(sender: Sender<Message>, mut reader: OwnedReadHalf) {
 
     loop {
         let mut buffer = [0u8; std::mem::size_of::<crate::PacketLenType>()];
-        if let Err(err) = reader.read_exact(&mut buffer).await {
-            println!("error in read packet len: {}", err);
+        if let Err(_err) = reader.read_exact(&mut buffer).await {
+//            println!("error in read packet len: {}", err);
             break;
         }
         let len = <crate::PacketLenType>::from_ne_bytes(buffer);
         let mut packet = crate::Packet::new(len as usize);
 
-        if let Err(err) = reader.read_exact(&mut packet.buffer).await {
-            println!("error in read packet data:{}", err);
+        if let Err(_err) = reader.read_exact(&mut packet.buffer).await {
+//            println!("error in read packet data:{}", err);
             break;
         }
 
         if let Err(err) = sender.send(Message::ReceivePacket(packet)).await {
             println!("error in send Message::ReceivePacket: err = {}", err);
+            break;
         }
     }
-    if let Err(err) = sender.send(Message::Disconnected).await {
-        println!("error in send Message::Disconnect: err = {}", err);
+    if let Err(_err) = sender.send(Message::Disconnected).await {
+        // 主动关闭会出现发送失败的情况.
+//        println!("error in send Message::Disconnect: err = {}", err);
     }
 }

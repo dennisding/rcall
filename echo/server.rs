@@ -11,7 +11,7 @@ struct EchoServerServices {
 
 impl rcall::ServerServices for EchoServerServices {
     type ConnectionType = EchoConnection;
-    fn new_connection(&mut self, connection: &rcall::Connection) -> Self::ConnectionType {
+    fn new_connection(&mut self, connection: &mut rcall::Connection) -> Self::ConnectionType {
         EchoConnection {
             remote: EchoRemote::new(connection.new_sender()),
         }
@@ -27,6 +27,8 @@ impl protocols::EchoServer for EchoConnection {
     fn echo(&mut self, msg: String) {
         println!("sound from client!:{}", msg);
         self.remote.echo_back(msg);
+
+        self.remote.close();
     }
 }
 
