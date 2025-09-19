@@ -30,7 +30,7 @@ impl rcall::ClientServices for ClientServicesImpl {
 //        self.remote.hello_from_client("msg from client!".to_string());
     }
 
-    fn on_disconnected(&mut self, dispatcher: &Self::DispatcherType) {
+    fn on_disconnected(&mut self, _dispatcher: &Self::DispatcherType) {
         println!("on client disconnected");
     }
 }

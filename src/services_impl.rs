@@ -1,6 +1,4 @@
 
-use paste;
-
 use crate::ServerServices;
 use crate::RpcDispatcher;
 
@@ -212,7 +210,6 @@ async fn process_read(connect_id: usize, mut reader: OwnedReadHalf, sender: mpsc
     if let Err(err) = sender.send(Message::Disconnected(connect_id)).await {
         println!("error in send Message::Disconnected: connect_id = {}, err = {}", connect_id, err);
     }
-    paste::paste!()
 }
 
 // protocols::ImplInServer_Remote<rcall::ClientSender>

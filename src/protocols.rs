@@ -18,6 +18,7 @@ use rcall;
 
 
 #[rcall::protocol]
+#[allow(dead_code)]
 pub trait ImplInClient {
     #[rcall::rpc(1)]
     fn hello_from_server(&mut self, msg: String);
@@ -26,6 +27,7 @@ pub trait ImplInClient {
 }
 
 #[rcall::protocol]
+#[allow(dead_code)]
 pub trait ImplInServer {
     #[rcall::rpc(1)]
     fn hello_from_client(&mut self, msg: String);
