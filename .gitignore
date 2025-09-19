@@ -22,3 +22,5 @@ target
 #.idea/
 
 /target
+
+rcall.code-workspace
