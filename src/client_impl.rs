@@ -1,4 +1,6 @@
 
+use crate::ClientServices;
+use crate::RpcDispatcher;
 
 use tokio;
 use tokio::io::{AsyncReadExt};
@@ -14,11 +16,6 @@ pub enum Message {
     ReceivePacket(crate::Packet)
 }
 
-pub trait ClientServices {
-    fn on_connected(&mut self);
-    fn on_disconnected(&mut self);
-}
-
 pub struct ClientSender {
     sender: mpsc::Sender<Message>
 }
@@ -29,38 +26,43 @@ impl ClientSender {
             sender,
         }
     }
+}
 
-    pub fn send(&mut self, packet: crate::Packet) {
+impl crate::Sender for ClientSender {
+    fn send(&mut self, packet: crate::Packet) {
         if let Err(err) = self.sender.try_send(Message::SendPacket(packet)) {
             println!("error in client send: err = {}", err);
         }
     }
 }
 
-pub struct Client<T: ClientServices + crate::RpcDispatcher> {
+pub struct Client<T: ClientServices> {
     sender: mpsc::Sender<Message>,
     receiver: mpsc::Receiver<Message>,
-    dispatcher: Option<T>,
+    services: T,
+    dispatcher: T::DispatcherType,
     runtime: tokio::runtime::Runtime,
     writer: Option<tokio::net::tcp::OwnedWriteHalf>
 }
 
-impl<T: ClientServices + crate::RpcDispatcher> Client<T> {
-    pub fn new() -> Self {
+impl<T: ClientServices> Client<T> {
+    pub fn new(mut services: T) -> Self {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let (sender, receiver) = mpsc::channel::<Message>(crate::CHANNEL_SIZE);
+        let dispatcher = services.new_dispatcher(ClientSender::new(sender.clone()));
         Client {
             sender,
             receiver,
-            dispatcher: None,
+            services,
+            dispatcher,
             runtime,
             writer: None
         }
     }
 
-    pub fn set_dispatcher(&mut self, dispatcher: T) {
-        self.dispatcher = Some(dispatcher);
-    }
+    // pub fn set_dispatcher(&mut self, dispatcher: T) {
+    //     self.dispatcher = Some(dispatcher);
+    // }
 
     pub fn new_sender(&mut self) -> ClientSender {
         ClientSender::new(self.sender.clone())
@@ -102,13 +104,15 @@ impl<T: ClientServices + crate::RpcDispatcher> Client<T> {
     fn dispatch_message(&mut self, msg: Message) {
         match msg {
             Message::Connected => {
-                self.dispatcher.as_mut().unwrap().on_connected();
+//                self.dispatcher.as_mut().unwrap().on_connected();
+                self.services.on_connected(&mut self.dispatcher);
             }
             Message::SendPacket(packet) => {
                 self.send_packet(packet);
             }
             Message::ReceivePacket(packet) => {
-                self.dispatcher.as_mut().unwrap().dispatch_rpc(packet);
+                self.dispatcher.dispatch_rpc(packet);
+//                self.dispatcher.as_mut().unwrap().dispatch_rpc(packet);
             }
             _ => {
                 println!("unhandle message");

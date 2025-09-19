@@ -4,9 +4,38 @@ use rcall;
 mod protocols;
 use protocols::ImplInClient;
 
-use crate::protocols::ImplInServer;
+type ClientRemote = rcall::client_to_remote_type!(protocols::ImplInServer);
 
-#[derive(rcall::Protocol)]
+struct ClientServicesImpl {
+}
+
+impl ClientServicesImpl {
+    pub fn new() -> Self {
+        ClientServicesImpl {
+
+        }
+    }
+}
+
+impl rcall::ClientServices for ClientServicesImpl {
+    type DispatcherType = ClientImpl;
+
+    fn new_dispatcher(&mut self, sender: rcall::ClientSender) -> Self::DispatcherType {
+        ClientImpl::new(ClientRemote::new(sender))
+    }
+    
+    fn on_connected(&mut self, dispatcher: &mut Self::DispatcherType) {
+        println!("on client connected");
+        dispatcher.remote.hello_from_client("msg from client!".to_string());
+//        self.remote.hello_from_client("msg from client!".to_string());
+    }
+
+    fn on_disconnected(&mut self, dispatcher: &Self::DispatcherType) {
+        println!("on client disconnected");
+    }
+}
+
+#[derive(rcall::Dispatcher)]
 struct ClientImpl {
     remote: ClientRemote
 }
@@ -16,17 +45,6 @@ impl ClientImpl {
         ClientImpl {
             remote
         }
-    }
-}
-
-impl rcall::ClientServices for ClientImpl {
-    fn on_connected(&mut self) {
-        println!("on client connected");
-        self.remote.hello_from_client("msg from client!".to_string());
-    }
-
-    fn on_disconnected(&mut self) {
-        println!("on client disconnected");
     }
 }
 
@@ -41,41 +59,10 @@ impl ImplInClient for ClientImpl {
     }
 }
 
-// implement by client
-struct ClientRemote {
-    sender: rcall::ClientSender,
-}
-
-impl ClientRemote {
-    pub fn new(sender: rcall::ClientSender) -> Self {
-        ClientRemote {
-            sender
-        }
-    }
-}
-
-impl ImplInServer for ClientRemote {
-    fn hello_from_client(&mut self, msg: String) {
-        let rpc_id: rcall::RpcId = 1; 
-        let packet = rcall::pack!(rpc_id, msg);
-        self.sender.send(packet);
-    }
-
-    fn login(&mut self, name: String, password: String) {
-        let rpc_id: rcall::RpcId = 2;
-        let packet = rcall::pack!(rpc_id, name, password);
-        self.sender.send(packet);
-    }
-}
-
 fn main() {
     println!("hello client!");
 
-    // generate by macro
-    let mut client = rcall::Client::new();
-    let dispatcher = ClientImpl::new(ClientRemote::new(client.new_sender()));
-    client.set_dispatcher(dispatcher);
-
+    let mut client = rcall::Client::new(ClientServicesImpl::new());
     client.connect("127.0.0.1".to_string(), 999);
 
     loop {

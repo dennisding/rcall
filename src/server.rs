@@ -1,10 +1,9 @@
 use rcall;
 
-use crate::protocols::{ImplInClient, ImplInServer};
 mod protocols;
+use protocols::{ImplInServer};
 
 struct ServicesImpl {
-
 }
 
 impl ServicesImpl {
@@ -15,7 +14,7 @@ impl ServicesImpl {
     }
 }
 
-impl rcall::Services for ServicesImpl {
+impl rcall::ServerServices for ServicesImpl {
     type ConnectionType = ConnectionImpl;
     fn new_connection(&mut self, connection: &rcall::Connection) -> Self::ConnectionType {
         let remote = ConnectionRemote::new(connection.new_sender());
@@ -33,7 +32,10 @@ impl rcall::Services for ServicesImpl {
     }
 }
 
-#[derive(rcall::Protocol)]
+
+type ConnectionRemote = rcall::server_to_remote_type!(protocols::ImplInClient);
+
+#[derive(rcall::Dispatcher)]
 struct ConnectionImpl {
     remote: ConnectionRemote
 }
@@ -50,39 +52,11 @@ impl protocols::ImplInServer for ConnectionImpl {
     fn hello_from_client(&mut self, msg: String) {
         println!("hello_from_client:msg = {}", msg);
         self.remote.hello_from_server(String::from("msg from server"));
-//        self.remote.login_result(1024);
     }
 
     fn login(&mut self, name: String, password: String) {
         println!("login:name[{}], password[{}]", name, password);
         self.remote.login_result(1024);
-    }
-}
-
-// implement by macro
-struct ConnectionRemote {
-    sender: rcall::ServerSender,
-}
-
-impl ConnectionRemote {
-    pub fn new(sender: rcall::ServerSender) -> Self {
-        ConnectionRemote {
-            sender
-        }
-    }
-}
-
-impl protocols::ImplInClient for ConnectionRemote {
-    fn hello_from_server(&mut self, msg: String) {
-        let rpc_id: rcall::RpcId = 1;
-        let packet = rcall::pack!(rpc_id, msg);
-        self.sender.send(packet);
-    }
-
-    fn login_result(&mut self, ok: i32) {
-        let rpc_id: rcall::RpcId = 2;
-        let packet = rcall::pack!(rpc_id, ok);
-        self.sender.send(packet);
     }
 }
 

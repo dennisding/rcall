@@ -1,3 +1,9 @@
+
+use paste;
+
+use crate::ServerServices;
+use crate::RpcDispatcher;
+
 use std::net::SocketAddr;
 use std::collections::HashMap;
 
@@ -12,25 +18,14 @@ pub enum Message {
     SendPacket(crate::ConnectId, crate::Packet)
 }
 
-pub trait Services {
-    type ConnectionType: crate::RpcDispatcher;
-    fn new_connection(&mut self, connection: &Connection) -> Self::ConnectionType;
-    fn on_connected(&mut self, connection: &mut ConnectionInfo<Self::ConnectionType>);
-    fn on_disconnected(&mut self, connection: &Connection);
-}
-
-pub trait RpcDispatcher {
-    fn dispatch_rpc(&mut self, packet: crate::packer::Packet);
-}
-
-pub struct Server<T: Services> {
+pub struct Server<T: ServerServices> {
     sender: mpsc::Sender<Message>,
     receiver: mpsc::Receiver<Message>,
     services: T,
     connections: HashMap<crate::ConnectId, ConnectionInfo<T::ConnectionType>>
 }
 
-impl<T: Services> Server<T> {
+impl<T: ServerServices> Server<T> {
     pub fn new(services: T) -> Self {
         let (sender, receiver) = mpsc::channel::<Message>(crate::CHANNEL_SIZE);
         Server {
@@ -122,8 +117,10 @@ impl ServerSender {
             sender
         }
     }
+}
 
-    pub fn send(&mut self, packet: crate::Packet) {
+impl crate::Sender for ServerSender {
+    fn send(&mut self, packet: crate::Packet) {
         if let Err(err) = self.sender.try_send(Message::SendPacket(self.id, packet)) {
             println!("error in ServerSender::send {}", err);
         }
@@ -215,4 +212,19 @@ async fn process_read(connect_id: usize, mut reader: OwnedReadHalf, sender: mpsc
     if let Err(err) = sender.send(Message::Disconnected(connect_id)).await {
         println!("error in send Message::Disconnected: connect_id = {}, err = {}", connect_id, err);
     }
+    paste::paste!()
 }
+
+// protocols::ImplInServer_Remote<rcall::ClientSender>
+// #[macro_export]
+// macro_rules! client_remote {
+//     ($path:path) => {
+// //        paste::paste!{[<protocols::ImplInServer _Remote>]<rcall::ClientSender>}
+//         // paste::paste!(
+//         //      [<$path _Remote>]<rcall::ClientSender>
+//         // )
+//     };
+//     () => {
+
+//     }
+// }

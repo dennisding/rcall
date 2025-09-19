@@ -25,11 +25,13 @@ which makes them unsuitable for a pattern where reading, writing, and event hand
 struct ServerToClient {
     #[rcall::rpc(100)]
     fn hello_from_server(&mut self, msg: String);
+    #[rcall::rpc(101)]
     fn login_result(&mut self, is_ok: Bool);
 }
 
 #[rcall::protocol]
 struct ClientToServer {
+    // auto gen the rpc_id
     fn hello_from_client(&mut self, msg: String);
     fn login(&mut self, name: String, password: String);
 }
@@ -38,11 +40,10 @@ struct ClientToServer {
 ## 2. implement and use the services for Server
 
 ```rust
-#[derive(rcall::Protocol)]
-struct Services {
+struct ServerServicesImpl {
 }
 
-impl rcall::network::Services for Services {
+impl rcall::network::ServerServices for ServerServicesImpl {
     type ConnectType = ConnectionImpl;
     fn new_connection(&mut self) -> Self::ConnectType {
         ConnectionImpl {
@@ -53,6 +54,7 @@ impl rcall::network::Services for Services {
     }
 }
 
+#[derive(rcall::Dispatcher)]
 struct ConnectionImpl {
 }
 
@@ -69,8 +71,8 @@ impl protocols::ClientToServer {
 }
 
 fn main() {
-    let services = rcall::services!(protocols::Client, protocols::Server);
-    services.serve_forever_at(999, Services::new());
+    let mut server = rcall::Server::new(ServerServicesImpl::new());
+    server.serve_forever_at(999);
 }
 
 ```
@@ -78,17 +80,14 @@ fn main() {
 ## 3. implement and use the Connection for client
 
 ```rust
-#[derive(rcall::Protocol)]
-struct ClientImpl {
-
-}
-
-impl rcall::network::Client for ClientImpl {
-    fn on_connected(&mut self) {
-        println!("on_connected");
-    }
+struct ClientServicesImpl {}
+impl rcall::ClientServices for ClientServicesImpl {
+    type DispatcherType = ClientImpl
     ...
 }
+
+#[derive(rcall::Dispatcher)]
+struct ClientImpl { }
 
 impl protocols::ServerToClient for ClientImpl {
     fn hello_from_server(&mut self, msg: String) {
@@ -103,11 +102,12 @@ impl protocols::ServerToClient for ClientImpl {
 }
 
 fn main() {
-    let client = rcall::client!(protocols::ServerToClient, protocols::ClientToServer);
-    client.connect_to("127.0.0.1", 999, ClientImpl::new());
+    let client = rcall::Client::new(ClientServicesImpl{});
+    client.connect_to("127.0.0.1", 999);
 
     loop {
-        client.process();
+        client.poll();
+        std::thread::sleep(std::time::Duration::from_nanos(1));
     }
 }
 ```
