@@ -66,10 +66,6 @@ impl<T: ClientServices> Client<T> {
         }
     }
 
-    // pub fn set_dispatcher(&mut self, dispatcher: T) {
-    //     self.dispatcher = Some(dispatcher);
-    // }
-
     pub fn new_sender(&mut self) -> ClientSender {
         ClientSender::new(self.sender.clone())
     }
@@ -103,6 +99,21 @@ impl<T: ClientServices> Client<T> {
         }
     }
 
+    pub fn block_poll(&mut self) {
+        if let None = self.writer {
+            return;
+        }
+
+        loop {
+            if let Some(msg) = self.receiver.blocking_recv() {
+                self.dispatch_message(msg);
+            }
+            else {
+                break;
+            }
+        }
+    }
+
     fn clean_connection(&mut self) {
         self.writer = None;
     }
@@ -110,7 +121,6 @@ impl<T: ClientServices> Client<T> {
     fn dispatch_message(&mut self, msg: Message) {
         match msg {
             Message::Connected => {
-//                self.dispatcher.as_mut().unwrap().on_connected();
                 self.services.on_connected(&mut self.dispatcher);
             }
             Message::SendPacket(packet) => {
@@ -118,16 +128,12 @@ impl<T: ClientServices> Client<T> {
             }
             Message::Disconnect => {
                 self.on_disconnect();
-                // self.writer = None;
-                // self.receiver.close();
             }
             Message::Disconnected => {
                 self.on_disconnected();
-//                self.services.on_disconnected(&mut self.dispatcher);
             }
             Message::ReceivePacket(packet) => {
                 self.dispatcher.dispatch_rpc(packet);
-//                self.dispatcher.as_mut().unwrap().dispatch_rpc(packet);
             }
             _ => {
                 println!("unhandle message");
@@ -144,6 +150,9 @@ impl<T: ClientServices> Client<T> {
 
     fn on_disconnected(&mut self) {
         self.services.on_disconnected(&mut self.dispatcher);
+        self.receiver.close();
+        self.writer = None;
+//        self.receiver.close();
     }
 
     fn send_packet(&mut self, packet: crate::Packet) {
@@ -169,14 +178,12 @@ async fn client_reader(sender: Sender<Message>, mut reader: OwnedReadHalf) {
     loop {
         let mut buffer = [0u8; std::mem::size_of::<crate::PacketLenType>()];
         if let Err(_err) = reader.read_exact(&mut buffer).await {
-//            println!("error in read packet len: {}", err);
             break;
         }
         let len = <crate::PacketLenType>::from_ne_bytes(buffer);
         let mut packet = crate::Packet::new(len as usize);
 
         if let Err(_err) = reader.read_exact(&mut packet.buffer).await {
-//            println!("error in read packet data:{}", err);
             break;
         }
 
@@ -187,6 +194,5 @@ async fn client_reader(sender: Sender<Message>, mut reader: OwnedReadHalf) {
     }
     if let Err(_err) = sender.send(Message::Disconnected).await {
         // 主动关闭会出现发送失败的情况.
-//        println!("error in send Message::Disconnect: err = {}", err);
     }
 }

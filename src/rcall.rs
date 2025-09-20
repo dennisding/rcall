@@ -6,9 +6,6 @@ type PacketLenType = i16;
 pub const CHANNEL_SIZE: usize = 512;
 pub const CONNECT_ID_BEGIN: usize = 100;
 
-// mod message;
-// pub use message::Message;
-
 pub mod services_impl;
 pub use services_impl::Server;
 pub use services_impl::Connection;
@@ -21,8 +18,6 @@ pub use client_impl::ClientSender;
 
 mod bichannel;
 pub use bichannel::Bichannel;
-
-//pub mod network;
 
 pub use rcall_macro::rpc;
 pub use rcall_macro::protocol;

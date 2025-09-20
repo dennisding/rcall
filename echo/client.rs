@@ -38,8 +38,10 @@ fn main() {
     let mut client = rcall::Client::new(EchoClientServices {});
     client.connect("127.0.0.1".to_string(), 999);
 
-    loop {
-        client.poll();
-        std::thread::sleep(std::time::Duration::from_millis(1));
-    }
+    client.block_poll();
+
+    // loop {
+    //     client.poll();
+    //     std::thread::sleep(std::time::Duration::from_millis(1));
+    // }
 }

@@ -214,14 +214,12 @@ async fn process_read(connect_id: usize, mut reader: OwnedReadHalf, sender: mpsc
     loop {
         let mut buffer = [0u8; std::mem::size_of::<crate::PacketLenType>()];
         if let Err(_err) = reader.read_exact(&mut buffer).await {
-//            println!("error in read packet len: {}", err);
             break;
         }
         let len = <crate::PacketLenType>::from_ne_bytes(buffer);
         let mut packet = crate::Packet::new(len as usize);
 
         if let Err(_err) = reader.read_exact(&mut packet.buffer).await {
-//            println!("error in read packet data:{}", err);
             break;
         }
 
@@ -233,17 +231,3 @@ async fn process_read(connect_id: usize, mut reader: OwnedReadHalf, sender: mpsc
         println!("error in send Message::Disconnected: connect_id = {}, err = {}", connect_id, err);
     }
 }
-
-// protocols::ImplInServer_Remote<rcall::ClientSender>
-// #[macro_export]
-// macro_rules! client_remote {
-//     ($path:path) => {
-// //        paste::paste!{[<protocols::ImplInServer _Remote>]<rcall::ClientSender>}
-//         // paste::paste!(
-//         //      [<$path _Remote>]<rcall::ClientSender>
-//         // )
-//     };
-//     () => {
-
-//     }
-// }

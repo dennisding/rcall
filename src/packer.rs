@@ -105,13 +105,6 @@ macro_rules! gen_values {
 }
 
 #[macro_export]
-macro_rules! tuple_append {
-    (($($values: tt), *), $tail: tt) => {
-        ($($values,)* $tail)
-    }
-}
-
-#[macro_export]
 macro_rules! unpack {
     ($packet: ident, $($types: ty),* ) => {{
         let none_value = Option::<($($types),*)>::None;

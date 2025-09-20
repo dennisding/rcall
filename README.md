@@ -18,60 +18,63 @@ which makes them unsuitable for a pattern where reading, writing, and event hand
 
 ## how to use?
 
+## 0. install the rcall
+
+Run the following Cargo command in your project directory:
+
+cargo add rcall
+
+Or add the following line to your Cargo.toml:
+
+rcall = "0.1.0"
+
 ## 1. define the protocols
 
 ```rust
 #[rcall::protocol]
-struct ServerToClient {
-    #[rcall::rpc(100)]
-    fn hello_from_server(&mut self, msg: String);
-    #[rcall::rpc(101)]
-    fn login_result(&mut self, is_ok: Bool);
+pub trait EchoClient {
+    fn echo_back(&mut self, msg: String);
 }
 
 #[rcall::protocol]
-struct ClientToServer {
-    // auto gen the rpc_id
-    fn hello_from_client(&mut self, msg: String);
-    fn login(&mut self, name: String, password: String);
+pub trait EchoServer {
+    fn echo(&mut self, msg: String);
 }
 ```
 
 ## 2. implement and use the services for Server
 
 ```rust
-struct ServerServicesImpl {
+type EchoRemote = rcall::server_to_remote_type!(protocols::EchoClient);
+
+struct EchoServerServices { 
 }
 
-impl rcall::network::ServerServices for ServerServicesImpl {
-    type ConnectType = ConnectionImpl;
-    fn new_connection(&mut self) -> Self::ConnectType {
-        ConnectionImpl {
+impl rcall::ServerServices for EchoServerServices {
+    type ConnectionType = EchoConnection;
+    fn new_connection(&mut self, connection: &mut rcall::Connection) -> Self::ConnectionType {
+        EchoConnection {
+            remote: EchoRemote::new(connection.new_sender()),
         }
-    }
-    fn on_connected(&mut self, connection: Self::ConnectType) {
-        println!("on_connected!!!!");
     }
 }
 
 #[derive(rcall::Dispatcher)]
-struct ConnectionImpl {
+struct EchoConnection {
+    remote: EchoRemote
 }
 
-impl protocols::ClientToServer {
-    fn hello_from_client(&mut self, msg: String) {
-        println!("hello_from_client: msg:{}", msg);
-        self.remote.hello_from_server("msg from server!!!");
-    }
+impl protocols::EchoServer for EchoConnection {
+    fn echo(&mut self, msg: String) {
+        println!("sound from client!:{}", msg);
+        self.remote.echo_back(msg);
 
-    fn login(&mut self, name: String, password: String) {
-        println!("login: name[{}], password[{}]", name, password);
-        self.remote.login_result();
+        self.remote.close();
     }
 }
 
 fn main() {
-    let mut server = rcall::Server::new(ServerServicesImpl::new());
+    let mut server = rcall::Server::new(EchoServerServices {});
     server.serve_forever_at(999);
 }
 
@@ -80,34 +83,41 @@ fn main() {
 ## 3. implement and use the Connection for client
 
 ```rust
-struct ClientServicesImpl {}
-impl rcall::ClientServices for ClientServicesImpl {
-    type DispatcherType = ClientImpl
-    ...
+struct EchoClientServices {
+}
+
+impl rcall::ClientServices for EchoClientServices {
+    type DispatcherType = EchoClientImpl;
+
+    fn new_dispatcher(&mut self, sender: rcall::ClientSender) -> Self::DispatcherType {
+        EchoClientImpl {
+            remote: ClientRemote::new(sender)
+        }
+    }
+
+    fn on_connected(&mut self, dispatcher: &mut Self::DispatcherType) {
+        dispatcher.remote.echo("some 中文 message".to_string());
+    }
 }
 
 #[derive(rcall::Dispatcher)]
-struct ClientImpl { }
+struct EchoClientImpl {
+    remote: ClientRemote
+}
 
-impl protocols::ServerToClient for ClientImpl {
-    fn hello_from_server(&mut self, msg: String) {
-        println!("hello_from_server: {}", msg);
-        self.remote.hello_from_client("msg from client!");
-        self.remote.login(String::from("dennis"), String::from("ding"));
-    }
-
-    fn login_result(&mut self, result: bool) {
-        println!("login result! {}", result);
+impl EchoClient for EchoClientImpl {
+    fn echo_back(&mut self, msg: String) {
+        println!("sound from server: {}", msg);
     }
 }
 
 fn main() {
-    let client = rcall::Client::new(ClientServicesImpl{});
-    client.connect_to("127.0.0.1", 999);
+    let mut client = rcall::Client::new(EchoClientServices {});
+    client.connect("127.0.0.1".to_string(), 999);
 
     loop {
         client.poll();
-        std::thread::sleep(std::time::Duration::from_nanos(1));
+        std::thread::sleep(std::time::Duration::from_millis(1));
     }
 }
 ```
