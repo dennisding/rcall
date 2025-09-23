@@ -45,8 +45,8 @@ impl crate::Sender for ClientSender {
 pub struct Client<T: ClientServices> {
     sender: mpsc::Sender<Message>,
     receiver: mpsc::Receiver<Message>,
-    services: T,
-    dispatcher: T::DispatcherType,
+    pub services: T,
+    pub dispatcher: T::DispatcherType,
     runtime: tokio::runtime::Runtime,
     writer: Option<tokio::net::tcp::OwnedWriteHalf>
 }
